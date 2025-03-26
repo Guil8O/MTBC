@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MTBC 신체변화보고서</title>
+
+    <link rel="manifest" href="manifest.json">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MTBC 보고서">
+    <meta name="theme-color" content="#270082"/> /* manifest.json의 theme_color와 일치시킴 */
+
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.30.1/moment.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/moment@2.30.1/locale/ko.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌸</text></svg>">
+</head>
+<body>
+    <div class="container">
+        <div class="title-container">
+            <img src="./assets/title.svg" alt="MTBC 신체변화보고서" id="main-title"> [source: 464]
+            </div>
+        <p class="version-info">v1.1</p> [source: 3]
+
+        <div class="tab-bar">
+            <button class="tab-button active" data-tab="tab-input">측정 입력</button> [source: 465]
+            <button class="tab-button" data-tab="tab-history">측정 기록</button>
+            <button class="tab-button" data-tab="tab-change-report">변화 보고서</button>
+            <button class="tab-button" data-tab="tab-targets">목표 설정</button>
+            <button class="tab-button" data-tab="tab-overview">개요 및 메모</button>
+            <button class="tab-button" data-tab="tab-calendar">D-day</button> [source: 466]
+            <button class="tab-button" data-tab="tab-settings">설정</button>
+        </div>
+
+        <div class="tab-contents">
+             <div id="tab-input" class="tab-content active card">
+                <h2 id="form-title">새 측정 기록 (현재 <span id="current-week">0</span>주차)</h2>
+                <form id="measurement-form">
+                    <input type="hidden" id="edit-index" value="-1"> [source: 467]
+                    <p class="description">모든 항목은 선택 사항이에요! 기록하고 싶은 것만 편하게 입력해주세요 😉</p> [source: 468]
+                    <div class="input-grid">
+                        <div class="form-group"><label for="weight">체중(kg)</label><input type="number" id="weight" name="weight" step="0.1"></div> <div class="form-group"><label for="shoulder">어깨너비(cm)</label><input type="number" id="shoulder" name="shoulder" step="0.1"></div>
+                        <div class="form-group"><label for="neck">목둘레 (cm)</label><input type="number" id="neck" name="neck" step="0.1"></div> [source: 469]
+                        <div class="form-group"><label for="chest">가슴둘레(cm)</label><input type="number" id="chest" name="chest" step="0.1"></div>
+                        <div class="form-group"><label for="waist">허리둘레(cm)</label><input type="number" id="waist" name="waist" step="0.1"></div>
+                        <div class="form-group"><label for="hips">엉덩이둘레(cm)</label><input type="number" id="hips" name="hips" step="0.1"></div> [source: 470]
+                        <div class="form-group"><label for="thigh">허벅지둘레(cm)</label><input type="number" id="thigh" name="thigh" step="0.1"></div>
+                        <div class="form-group"><label for="calf">종아리둘레(cm)</label><input type="number" id="calf" name="calf" step="0.1"></div>
+                        <div class="form-group"><label for="arm">팔뚝둘레(cm)</label><input type="number" id="arm" name="arm" step="0.1"></div>
+                        <div class="form-group"><label for="libido">성욕(회/주)</label><input type="number" id="libido" name="libido" step="1"></div> [source: 471]
+                        <div class="form-group"><label for="estradiol">에스트라디올(mg)</label><input type="number" id="estradiol" name="estradiol" step="0.1"></div>
+                        <div class="form-group"><label for="progesterone">프로게스테론(mg)</label><input type="number" id="progesterone" name="progesterone" step="1"></div>
+
+                        <div class="form-group form-group-compound"> [source: 472]
+                            <label>정액 상태</label>
+                            <div class="compound-input">
+                                <input type="number" id="semen_score" name="semen_score" placeholder="점수"> [source: 472]
+                                <input type="text" id="semen_notes" name="semen_notes" placeholder="특이사항"> [source: 473]
+                            </div>
+                        </div>
+                        <div class="form-group form-group-compound"> [source: 474]
+                            <label>건강 상태</label>
+                            <div class="compound-input">
+                                <input type="number" id="health_score" name="health_score" placeholder="점수"> [source: 475]
+                                <input type="text" id="health_notes" name="health_notes" placeholder="특이사항"> </div>
+                        </div>
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" id="save-update-button">기록하기 ✨</button> [source: 476]
+                        <button type="button" id="cancel-edit-button" style="display: none;">수정 취소</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="tab-history" class="tab-content card">
+                <h2>측정 기록 꼼꼼히 보기 🧐</h2>
+                 <p class="description">(표가 화면보다 넓으면 좌우로 스크롤해보세요!)</p>
+                 <div id="history-table-container" class="table-responsive horizontal-scroll"> [source: 478]
+                    <p>아직 기록된 데이터가 없어요. 첫 기록을 남겨볼까요?</p> [source: 479]
+                </div>
+            </div>
+
+            <div id="tab-change-report" class="tab-content card">
+                <h2>나의 변화 리포트 📈</h2>
+                <div class="report-section">
+                     <h3>주차별 변화 그래프</h3> [source: 480]
+                    <p class="description">보고 싶은 항목 버튼을 눌러 선택(핑크색)하거나 해제할 수 있어요. 여러 항목을 겹쳐 볼 수도 있답니다!</p> [source: 481]
+                    <div class="chart-controls-container">
+                        <div id="chart-selector" class="chart-controls"></div>
+                        <div class="chart-bulk-actions">
+                            <button id="select-all-charts" class="select-all-button">전체 선택</button> [source: 482]
+                             <button id="deselect-all-charts" class="deselect-all-button">전체 해제</button>
+                        </div>
+                    </div>
+                     <div class="chart-container"> [source: 483]
+                        <canvas id="measurement-chart"></canvas>
+                    </div>
+                </div>
+                <div class="report-section">
+                    <h3 class="table-title">지난주와 비교하면? 🤔</h3> [source: 484]
+                    <div id="prev-week-comparison-container" class="table-responsive">
+                        <p>데이터가 2개 이상 기록되어야 비교할 수 있어요.</p>
+                    </div>
+                </div>
+                 <div class="report-section"> [source: 485]
+                    <h3 class="table-title">처음과 비교하면? 🌱➡️🌳</h3> [source: 486]
+                    <div id="initial-comparison-container" class="table-responsive">
+                        <p>데이터가 2개 이상 기록되어야 비교할 수 있어요.</p>
+                    </div>
+                </div>
+                 <div class="report-section"> [source: 487]
+                    <h3 class="table-title">목표까지 얼마나 왔을까? 🎯</h3> [source: 488]
+                    <div id="target-comparison-container" class="table-responsive">
+                        <p>먼저 '목표 설정' 탭에서 목표를 입력해주세요!</p>
+                    </div>
+                 </div>
+             </div>
+
+            <div id="tab-targets" class="tab-content card">
+                <h2>나만의 목표 설정하기 💖</h2>
+                <form id="target-form">
+                    <p class="description">원하는 목표 수치를 입력해주세요. 보고서 탭에서 달성률을 확인할 수 있어요.</p> [source: 489]
+                    <div class="target-grid"></div> [source: 490]
+                    <button type="submit" id="save-targets-button">목표 저장! 💪</button> [source: 491]
+                </form>
+            </div>
+
+            <div id="tab-overview" class="tab-content card">
+                <h2>개요 및 메모 📝</h2>
+                <div id="note-form-area">
+                    <input type="hidden" id="edit-note-id" value=""> [source: 492]
+                    <h3 id="note-form-title">새 메모 작성하기</h3>
+                    <div class="form-group">
+                        <label for="note-title">제목</label>
+                        <input type="text" id="note-title" placeholder="메모 제목을 입력하세요 (선택)"> [source: 493]
+                    </div>
+                    <div class="form-group">
+                        <label for="note-content">내용</label>
+                        <textarea id="note-content" rows="5" placeholder="사진 링크, 감정, 이벤트 등 자유롭게 기록해요!"></textarea> [source: 494]
+                    </div>
+                    <div class="button-group">
+                        <button id="save-note-button">메모 저장 🖋️</button>
+                        <button id="cancel-edit-note-button" style="display: none;">수정 취소</button>
+                     </div>
+                </div>
+
+                <hr class="divider"> [source: 495]
+
+                <h3>작성된 메모 목록 ✨</h3>
+                <div class="notes-controls">
+                    <label for="note-sort-order">정렬:</label> [source: 496]
+                    <select id="note-sort-order">
+                        <option value="newest">최신 순</option>
+                        <option value="oldest">오래된 순</option>
+                    </select>
+                 </div>
+                <div id="notes-list-container"> [source: 497]
+                    <p>아직 작성된 메모가 없네요. 첫 메모를 남겨보세요!</p> [source: 498]
+                </div>
+            </div>
+
+            <div id="tab-calendar" class="tab-content card">
+                 <h2>D-day 🗓️</h2>
+                 <div class="report-section">
+                     <h3>다음 측정일까지</h3> [source: 499]
+                     <div id="countdown-display">
+                         <p>마지막 측정일을 기준으로 계산해요.</p>
+                     </div>
+                 </div>
+                 <div class="report-section"> [source: 500]
+                     <h3>측정했던 날짜들</h3>
+                     <div id="measurement-date-list" class="calendar-list">
+                         <p>측정 기록이 여기에 표시될 거예요.</p>
+                     </div>
+                 </div>
+            </div>
+
+            <div id="tab-settings" class="tab-content card">
+               <h2>설정 ⚙️</h2> [source: 501]
+                 <div class="settings-section">
+                     <h3>데이터 백업 & 복원</h3> [source: 502]
+                     <p class="description">소중한 모든 기록(측정, 목표, 메모)을 안전하게 파일 하나로 저장하거나, 이전에 저장한 파일로 복원할 수 있어요. 가끔 백업해두면 안심이에요! 😊</p> [source: 503]
+                     <div class="button-group">
+                        <button type="button" id="export-data-button">파일 저장하기</button>
+                        <button type="button" id="import-data-button">파일 불러오기</button>
+                     </div>
+                     <input type="file" id="import-file-input" accept=".json" style="display: none;"> [source: 504]
+                     <p class="warning"><strong>주의!</strong> 복원하면 지금 브라우저에 있는 모든 데이터가 파일 내용으로 완전히 대체돼요!</p>
+                 </div>
+                 <div class="settings-section">
+                     <h3>데이터 초기화</h3> [source: 505]
+                     <p class="warning"><strong>정말정말 주의하세요!</strong> 😱 아래 버튼은 브라우저에 저장된 모든 데이터를 영구적으로 삭제해요! 초기화하기 전에 꼭! 데이터를 파일로 백업해주세요.</p> [source: 506]
+                      <div class="button-group">
+                         <button type="button" id="reset-data-button" class="danger-button">모든 데이터 초기화</button>
+                     </div>
+                 </div>
+                 <div class="settings-section info"> [source: 507]
+                    <h3>정보</h3>
+                    <p>버전: 1.1</p> <p>이 앱은 인터넷 연결 없이도 작동하며, 모든 데이터는 여러분의 브라우저 안에만 안전하게 저장돼요. 어디로도 전송되지 않으니 안심하세요! 😉</p> [source: 508]
+                    <p style="margin-top: 15px;"><strong>Made by MUMU</strong> 💖</p>
+                    <p style="margin-top: 20px;">이 작은 도구가 당신의 소중한 여정에 즐거움과 도움이 되기를 바라요!</p>
+                    <p>ⓒ 2025. MUMU. All rights reserved.</p> [source: 509]
+                </div>
+            </div>
+             [source: 510]
+        </div>
+
+        <div id="save-popup" class="popup">저장 완료! 🎉</div> [source: 511]
+
+    </div>
+
+    <script src="script.js"></script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js') // 서비스 워커 파일 경로
+                    .then(registration => {
+                        console.log('✅ Service Worker 등록 성공:', registration);
+                    })
+                    .catch(error => {
+                        console.log('🚨 Service Worker 등록 실패:', error);
+                    });
+            });
+        } else {
+            console.log('Service Worker를 지원하지 않는 브라우저입니다.');
+        }
+    </script>
+</body>
+</html>
