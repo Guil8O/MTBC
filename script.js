@@ -1,3 +1,5 @@
+// script.js (스크롤 기능 추가된 전체 코드)
+
 window.onerror = function (message, source, lineno, colno, error) {
     console.error("🚨 전역 오류 발생:", message, "\n파일:", source, `\n라인:${lineno}:${colno}`, "\n오류 객체:", error);
     alert(`앗! 예상치 못한 오류가 발생했어요 😢 콘솔(F12)을 확인해주세요.\n오류: ${message}`);
@@ -13,6 +15,12 @@ document.addEventListener('DOMContentLoaded', () => {
     let notes = [];
     let currentNoteSortOrder = 'newest';
     let selectedMetrics = ['weight'];
+
+    // ----- 스크롤 관련 변수 선언 시작 -----
+    let lastScrollY = window.scrollY;
+    let isTabBarCollapsed = false; // 현재 탭 바 축소 상태
+    // ----- 스크롤 관련 변수 선언 끝 -----
+
     console.log("DEBUG: 상태 변수 정의 완료");
 
 
@@ -52,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const noteFormTitle = document.getElementById('note-form-title');
     const editNoteIdInput = document.getElementById('edit-note-id');
     const cancelEditNoteBtn = document.getElementById('cancel-edit-note-button');
-    const savePopup = document.getElementById('save-popup'); 
+    const savePopup = document.getElementById('save-popup');
     console.log("DEBUG: DOM 요소 가져오기 완료");
 
     console.log("DEBUG: 상수 정의 시작");
@@ -64,7 +72,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const numericKeys = [...baseNumericKeys, ...hormoneKeys, ...libidoKey, ...statusScoreKeys];
     const textKeys = [...statusNotesKeys];
     const displayKeysInOrder = ['weight', 'shoulder', 'neck', 'chest', 'waist', 'hips', 'thigh', 'calf', 'arm', 'estradiol', 'progesterone', 'libido', 'semen_score', 'semen_notes', 'health_score', 'health_notes'];
-
     const measurementLabels = {
         week: '주차', date: '날짜', weight: '체중 (kg)', shoulder: '어깨너비 (cm)', neck: '목둘레 (cm)',
         chest: '가슴둘레 (cm)', waist: '허리둘레 (cm)', hips: '엉덩이둘레 (cm)', thigh: '허벅지둘레 (cm)', calf: '종아리둘레 (cm)',
@@ -79,7 +86,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof value === 'number') {
             return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 1 });
         }
-        return value || '-'; 
+        return value || '-';
     }
 
     function formatTimestamp(dateInput) {
@@ -88,7 +95,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (typeof dateInput === 'number') {
             date = new Date(dateInput);
         } else {
-            date = new Date(dateInput);
+            // Handle cases like "YYYY.MM.DD"
+             const parts = typeof dateInput === 'string' ? dateInput.match(/(\d{4})\.*? *(\d{1,2})\.*? *(\d{1,2})\.?/) : null;
+             if (parts) {
+                 date = new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
+             } else {
+                 date = new Date(dateInput); // Fallback for standard parsing
+             }
         }
 
         if (isNaN(date.getTime())) return "유효하지 않음";
@@ -98,8 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const day = date.getDate().toString().padStart(2, '0');
         const hours = date.getHours().toString().padStart(2, '0');
         const minutes = date.getMinutes().toString().padStart(2, '0');
-        return `${year}-${month}-${day} ${hours}:${minutes}`; 
+        // Check if time is midnight (00:00) - often means time wasn't recorded
+        if (hours === '00' && minutes === '00' && dateInput.toString().indexOf(':') === -1) {
+             return `${year}-${month}-${day}`; // Only return date if time seems default/absent
+        }
+        return `${year}-${month}-${day} ${hours}:${minutes}`;
     }
+
 
     function showPopup(message, duration = 2000) {
         if (!savePopup) {
@@ -109,8 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         console.log(`DEBUG: 팝업 표시: "${message}"`);
         savePopup.textContent = message;
-        savePopup.classList.add('show'); 
-
+        savePopup.classList.add('show');
         if (savePopup.timerId) {
             clearTimeout(savePopup.timerId);
         }
@@ -118,10 +135,10 @@ document.addEventListener('DOMContentLoaded', () => {
         savePopup.timerId = setTimeout(() => {
             savePopup.classList.remove('show');
             console.log(`DEBUG: 팝업 숨김: "${message}"`);
-            savePopup.timerId = null; 
+            savePopup.timerId = null;
         }, duration);
     }
-    
+
 
     function setupTargetInputs() {
         if (!targetGrid) return;
@@ -130,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (numericKeys.includes(key)) {
                 const div = document.createElement('div');
                 div.classList.add('form-group');
-                div.innerHTML = `<label for="target_${key}">${measurementLabels[key]}</label><input type="number" id="target_${key}" name="${key}" step="0.1" min="0">`; 
+                div.innerHTML = `<label for="target_${key}">${measurementLabels[key]}</label><input type="number" id="target_${key}" name="${key}" step="0.1" min="0">`;
                 targetGrid.appendChild(div);
             }
         }
@@ -172,7 +189,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 measurements = Array.isArray(data.measurements) ? data.measurements : [];
                 targets = typeof data.targets === 'object' && data.targets !== null ? data.targets : {};
                 notes = Array.isArray(data.notes) ? data.notes : [];
-                measurements.forEach((m, index) => m.week = index);
+                measurements.forEach((m, index) => m.week = index); // Ensure week index is correct
                 console.log("DEBUG: 스토리지에서 데이터 로드됨:", measurements.length, "측정값,", Object.keys(targets).length, "목표,", notes.length, "메모.");
             } else {
                 console.log("DEBUG: 스토리지에 데이터 없음. 초기화합니다.");
@@ -181,7 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             console.error(" 스토리지에서 데이터 로드 오류:", e);
             alert("스토리지에서 데이터를 로드하는 중 오류가 발생했습니다. 기존 데이터가 손상되었을 수 있습니다. 콘솔을 확인해주세요.");
-            measurements = []; targets = {}; notes = []; 
+            measurements = []; targets = {}; notes = []; // Reset on error
         }
     }
 
@@ -192,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 project: "mtbc_tracker", version: APP_VERSION, exportedDate: new Date().toISOString(),
                 measurements: measurements, targets: targets, notes: notes
             };
-            const dataStr = JSON.stringify(dataToExport, null, 2); 
+            const dataStr = JSON.stringify(dataToExport, null, 2);
             const dataBlob = new Blob([dataStr], { type: 'application/json;charset=utf-8' });
             const url = URL.createObjectURL(dataBlob);
             const a = document.createElement('a');
@@ -202,7 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
             a.download = `mtbc_tracker_backup_${dateStr}.json`;
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showPopup("데이터 내보내기 성공! 🎉"); 
+            showPopup("데이터 내보내기 성공! 🎉");
         } catch (e) {
             console.error(" 데이터 내보내기 오류:", e);
             alert("데이터를 내보내는 중 오류가 발생했습니다.");
@@ -216,18 +233,20 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = function (e) {
             try {
                 const data = JSON.parse(e.target.result);
-                
+                // Basic validation
                 if (data && data.project === "mtbc_tracker" && Array.isArray(data.measurements) && typeof data.targets === 'object' && Array.isArray(data.notes)) {
                     if (confirm("현재 데이터를 덮어쓰고 가져온 데이터로 복원하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) {
                         measurements = data.measurements || [];
                         targets = data.targets || {};
                         notes = data.notes || [];
-                        measurements.forEach((m, index) => m.week = index);
-                        savePrimaryDataToStorage(); 
-                        populateTargetInputs(); 
-                        renderAll(); 
-                        showPopup("데이터 가져오기 성공! ✨"); 
-                        alert("데이터를 성공적으로 가져왔습니다. 페이지가 새로고침될 수 있습니다."); 
+                        measurements.forEach((m, index) => m.week = index); // Re-index weeks
+                        savePrimaryDataToStorage();
+                        populateTargetInputs();
+                        renderAll();
+                        showPopup("데이터 가져오기 성공! ✨");
+                        // Optional: reload page if needed for complex state updates, but usually renderAll is enough
+                        // location.reload();
+                        // alert("데이터를 성공적으로 가져왔습니다. 페이지가 새로고침될 수 있습니다.");
                     }
                 } else {
                     alert("파일 형식이 올바르지 않거나 호환되지 않는 데이터입니다.");
@@ -236,7 +255,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error(" 데이터 가져오기 오류:", e);
                 alert("파일을 읽거나 데이터를 처리하는 중 오류가 발생했습니다.");
             } finally {
-                if (importFileInput) importFileInput.value = ''; 
+                if (importFileInput) importFileInput.value = ''; // Reset file input
             }
         };
         reader.onerror = function () {
@@ -248,7 +267,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateCurrentWeekDisplay() {
         if (currentWeekSpan) {
-            currentWeekSpan.textContent = measurements.length > 0 ? measurements.length : 0; 
+            currentWeekSpan.textContent = measurements.length > 0 ? measurements.length : 0;
         } else { console.error("DEBUG: [오류!] currentWeekSpan 요소 없음!"); }
     }
 
@@ -273,10 +292,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function clearCalendarView() {
         console.log("DEBUG: -> clearCalendarView 호출됨");
         if (calendarViewMeasurementList) {
-            calendarViewMeasurementList.innerHTML = ''; 
+            calendarViewMeasurementList.innerHTML = '';
         }
         if (countdownDisplay) {
-             countdownDisplay.innerHTML = '<p>측정 기록이 없어요.</p>'; 
+             countdownDisplay.innerHTML = '<p>측정 기록이 없어요.</p>';
         }
     }
 
@@ -292,10 +311,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if(ctx){
                  ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
                  ctx.font = "16px sans-serif";
-                 ctx.fillStyle = "#a89cc8"; 
+                 ctx.fillStyle = "#a89cc8";
                  ctx.textAlign = "center";
                  ctx.fillText("표시할 항목을 선택하거나 데이터를 입력하세요.", chartCanvas.width / 2, chartCanvas.height / 2);
-            }
+             }
         }
     }
 
@@ -304,7 +323,6 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log("DEBUG: -> renderHistoryTable 호출됨");
     if (!historyContainer) { console.error("DEBUG: [오류!] historyContainer 요소 없음!"); return; }
     console.log("DEBUG: renderHistoryTable - Rendering with measurements count:", measurements.length);
-
     if (!Array.isArray(measurements) || measurements.length === 0) {
         clearHistoryTable();
         return;
@@ -318,22 +336,19 @@ document.addEventListener('DOMContentLoaded', () => {
             tableHTML += `<th>${measurementLabels[key] || key}</th>`;
         }
         tableHTML += '<th class="sticky-col">관리</th></tr></thead><tbody>';
-
         for (let i = 0; i < measurements.length; i++) {
             const m = measurements[i];
-            const displayDate = m.date || (m.timestamp ? new Date(m.timestamp).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '-');
-
+            const displayDate = formatTimestamp(m.date || m.timestamp); // Use formatTimestamp for consistency
             tableHTML += '<tr>';
             tableHTML += `<td>${m.week !== undefined ? m.week : i}</td>`;
             tableHTML += `<td>${displayDate}</td>`;
-
             for (const key of displayKeysInOrder) {
                 tableHTML += `<td>${formatValue(m[key])}</td>`;
             }
             tableHTML += `<td class="action-buttons sticky-col">
                             <button class="btn btn-edit" data-index="${i}">수정</button>
                             <button class="btn btn-delete" data-index="${i}">삭제</button>
-                          </td>`;
+                           </td>`;
             tableHTML += '</tr>';
         }
         tableHTML += '</tbody></table>';
@@ -348,7 +363,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderPrevWeekComparisonTable() {
         if (!prevWeekComparisonContainer) return;
         if (measurements.length < 2) {
-            clearTable(prevWeekComparisonContainer, "비교할 이전 주 데이터가 부족해요."); return;
+            clearTable(prevWeekComparisonContainer, "비교할 이전 주 데이터가 부족해요.");
+            return;
         }
         const lastWeek = measurements[measurements.length - 1];
         const secondLastWeek = measurements[measurements.length - 2];
@@ -359,18 +375,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lastValue = parseFloat(lastWeek[key]);
                 const secondLastValue = parseFloat(secondLastWeek[key]);
                 let change = '-'; let changeClass = '';
-
                 if (!isNaN(lastValue) && !isNaN(secondLastValue)) {
                     const diff = lastValue - secondLastValue;
-                    change = diff.toFixed(1); 
+                    change = diff.toFixed(1);
                     if (diff > 0.05) { change = `+${change}`; changeClass = 'positive-change'; }
                     else if (diff < -0.05) { changeClass = 'negative-change'; }
-                } else if (!isNaN(lastValue) && isNaN(secondLastValue)) { 
-                    change = `${formatValue(lastValue)}`; 
-                    changeClass = '';
-                } else if (isNaN(lastValue) && !isNaN(secondLastValue)){ 
-                    change = `${formatValue(secondLastValue)}`;
-                    changeClass = '';
+                } else if (!isNaN(lastValue) && isNaN(secondLastValue)) {
+                    change = `${formatValue(lastValue)}`;
+                    changeClass = ''; // Or maybe positive? Depends on context.
+                } else if (isNaN(lastValue) && !isNaN(secondLastValue)){
+                    change = `-${formatValue(secondLastValue)}`; // Indicate value loss
+                    changeClass = ''; // Or maybe negative?
                 }
 
                 tableHTML += `<tr><td>${measurementLabels[key]}</td><td>${formatValue(lastValue)}</td><td>${formatValue(secondLastValue)}</td><td class="${changeClass}">${change}</td></tr>`;
@@ -382,30 +397,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderInitialComparisonTable() {
         if (!initialComparisonContainer) return;
-        if (measurements.length < 1) { 
-             clearTable(initialComparisonContainer, "측정 데이터가 없어요."); return;
+        if (measurements.length < 1) {
+             clearTable(initialComparisonContainer, "측정 데이터가 없어요.");
+             return;
         }
         const initial = measurements[0];
         const latest = measurements[measurements.length - 1];
         const isOnlyOneRecord = measurements.length === 1;
 
-        let tableHTML = `<table><thead><tr><th>측정 항목</th><th>처음 (${initial.date || '-'})</th><th>최근 (${latest.date || '-'})</th><th>총 변화량</th></tr></thead><tbody>`;
+        const initialDateStr = formatTimestamp(initial.date || initial.timestamp).split(' ')[0]; // Date only
+        const latestDateStr = formatTimestamp(latest.date || latest.timestamp).split(' ')[0]; // Date only
+
+        let tableHTML = `<table><thead><tr><th>측정 항목</th><th>처음 (${initialDateStr || '-'})</th><th>최근 (${latestDateStr || '-'})</th><th>총 변화량</th></tr></thead><tbody>`;
         for (const key of displayKeysInOrder) {
             if (numericKeys.includes(key)) {
                 const initialValue = parseFloat(initial[key]);
                 const latestValue = parseFloat(latest[key]);
                 let change = '-'; let changeClass = '';
-
                 if (isOnlyOneRecord) {
-                    change = '-'; 
+                    change = '-';
                 } else if (!isNaN(initialValue) && !isNaN(latestValue)) {
                     const diff = latestValue - initialValue;
                     change = diff.toFixed(1);
                     if (diff > 0.05) { change = `+${change}`; changeClass = 'positive-change'; }
                     else if (diff < -0.05) { changeClass = 'negative-change'; }
-                } else if (!isNaN(latestValue) && isNaN(initialValue)) { 
-                    change = `${formatValue(latestValue)}`; 
-                    changeClass = '';
+                } else if (!isNaN(latestValue) && isNaN(initialValue)) {
+                    change = `${formatValue(latestValue)}`;
+                    changeClass = ''; // Or positive?
+                } else if (isNaN(latestValue) && !isNaN(initialValue)) {
+                     change = `-${formatValue(initialValue)}`; // Indicate value loss
+                     changeClass = ''; // Or negative?
                 }
 
                 tableHTML += `<tr><td>${measurementLabels[key]}</td><td>${formatValue(initialValue)}</td><td>${formatValue(latestValue)}</td><td class="${changeClass}">${change}</td></tr>`;
@@ -417,44 +438,61 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function renderTargetComparisonTable() {
         if (!targetComparisonContainer) return;
-        const targetKeysPresent = numericKeys.some(key => targets[key] !== undefined && targets[key] !== null);
+        const targetKeysPresent = numericKeys.some(key => targets[key] !== undefined && targets[key] !== null && targets[key] !== '');
         if (!targetKeysPresent) {
             clearTable(targetComparisonContainer, "설정된 목표가 없어요."); return;
         }
         if (measurements.length === 0) {
-            clearTable(targetComparisonContainer, "측정 데이터가 없어요."); return;
+            clearTable(targetComparisonContainer, "측정 데이터가 없어요.");
+            return;
         }
 
         const latestMeasurement = measurements[measurements.length - 1];
-        let tableHTML = '<table><thead><tr><th>측정 항목</th><th>목표</th><th>현재</th><th>달성률</th><th>차이</th></tr></thead><tbody>'; 
+        let tableHTML = '<table><thead><tr><th>측정 항목</th><th>목표</th><th>현재</th><th>달성률</th><th>차이</th></tr></thead><tbody>';
         for (const key of displayKeysInOrder) {
-            if (numericKeys.includes(key) && targets[key] !== undefined && targets[key] !== null && targets[key] !== '') { 
+            // Only show rows where a target exists for that key
+            if (numericKeys.includes(key) && targets[key] !== undefined && targets[key] !== null && targets[key] !== '') {
                 const targetValue = parseFloat(targets[key]);
                 const currentValue = parseFloat(latestMeasurement[key]);
                 let difference = '-'; let achievementRate = '-'; let differenceClass = ''; let rateClass = '';
 
-                if (!isNaN(targetValue) && targetValue > 0 && !isNaN(currentValue)) { 
-                    const diff = currentValue - targetValue;
-                    difference = diff.toFixed(1);
-                    if (diff > 0.05) { difference = `+${difference}`; differenceClass = 'positive-change'; }
-                    else if (diff < -0.05) { differenceClass = 'negative-change'; }
-                    else { differenceClass = 'target-achieved'; } 
+                // Calculate only if target and current values are valid numbers
+                if (!isNaN(targetValue) && !isNaN(currentValue)) {
+                     // Difference calculation
+                     const diff = currentValue - targetValue;
+                     difference = diff.toFixed(1);
+                     if (diff > 0.05) { difference = `+${difference}`; differenceClass = 'positive-change'; }
+                     else if (diff < -0.05) { differenceClass = 'negative-change'; }
+                     else { differenceClass = 'target-achieved'; } // Very close or exact
 
-                    
-                    
-                    const rate = (currentValue / targetValue) * 100;
-                    achievementRate = `${rate.toFixed(0)}%`; 
+                     // Achievement rate calculation (only if target is positive)
+                     if (targetValue > 0) {
+                        const rate = (currentValue / targetValue) * 100;
+                        achievementRate = `${rate.toFixed(0)}%`;
+                        // Rate class based on percentage
+                        if (rate >= 100) rateClass = 'target-achieved';
+                        else if (rate >= 80) rateClass = 'positive-change';
+                        else rateClass = 'negative-change';
+                    } else { // Handle targetValue being 0 or negative (rate calculation invalid)
+                         achievementRate = '-';
+                         rateClass = '';
+                         // If target is 0 and current is 0, maybe 'achieved'?
+                         if (targetValue === 0 && currentValue === 0) {
+                             differenceClass = 'target-achieved';
+                             rateClass = 'target-achieved';
+                         }
+                    }
 
-                    
-                    if (rate >= 100) rateClass = 'target-achieved';
-                    else if (rate >= 80) rateClass = 'positive-change';
-                    else rateClass = 'negative-change';
-
-                } else if (!isNaN(targetValue) && isNaN(currentValue)) { 
-                    difference = '-';
+                } else if (!isNaN(targetValue) && isNaN(currentValue)) { // Target set, but no current value
+                    difference = `-${formatValue(targetValue)}`; // Show how much is missing
                     achievementRate = '0%';
                     rateClass = 'negative-change';
+                    differenceClass = 'negative-change';
+                } else { // Target not a number or current value missing etc.
+                     difference = '-';
+                     achievementRate = '-';
                 }
+
 
                 tableHTML += `<tr>
                                 <td>${measurementLabels[key]}</td>
@@ -462,7 +500,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <td>${formatValue(currentValue)}</td>
                                 <td class="${rateClass}">${achievementRate}</td>
                                 <td class="${differenceClass}">${difference}</td>
-                              </tr>`;
+                               </tr>`;
             }
         }
         tableHTML += '</tbody></table>';
@@ -482,71 +520,68 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            
+            // Extract dates, ensuring they are valid Date objects
             const dateList = measurements.map(m => {
-                 if (m.date) { 
-                     const parts = m.date.match(/(\d{4})\.*? *(\d{1,2})\.*? *(\d{1,2})\.?/);
-                     if (parts) {
-                         return new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
-                     }
-                 } else if (m.timestamp) { 
-                     return new Date(m.timestamp);
+                 let date = null;
+                 const dateStr = m.date || m.timestamp;
+                 if (dateStr) {
+                    if (typeof dateStr === 'number') { // Handle timestamps
+                         date = new Date(dateStr);
+                    } else if (typeof dateStr === 'string') {
+                        // Try parsing YYYY.MM.DD format first
+                        const parts = dateStr.match(/(\d{4})\.*? *(\d{1,2})\.*? *(\d{1,2})\.?/);
+                        if (parts) {
+                            date = new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
+                        } else {
+                            // Fallback to standard parsing (might handle ISO strings etc.)
+                            date = new Date(dateStr);
+                        }
+                    }
                  }
-                 return null; 
-            }).filter(date => date && !isNaN(date.getTime())); 
+                 return date && !isNaN(date.getTime()) ? date : null; // Return only valid dates
+            }).filter(date => date !== null); // Filter out invalid/null dates
 
-            
-            dateList.sort((a, b) => a.getTime() - b.getTime());
+            if (dateList.length === 0) {
+                 clearCalendarView();
+                 countdownDisplay.innerHTML = '<p>유효한 측정 날짜가 없어요.</p>';
+                 return;
+            }
 
-            const uniqueDateStrings = [...new Set(dateList.map(date => date.toLocaleDateString('ko-KR')))]; 
+            dateList.sort((a, b) => a.getTime() - b.getTime()); // Sort dates chronologically
 
+            // Display unique measurement dates in the list
+            const uniqueDateStrings = [...new Set(dateList.map(date => date.toLocaleDateString('ko-KR')))];
             let listHTML = '<ul>';
             uniqueDateStrings.forEach(dateStr => {
-                 const date = new Date(dateStr); 
+                 const date = new Date(dateStr); // Re-parse for day of week
                  const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][date.getDay()];
                  listHTML += `<li>${date.getFullYear()}.${(date.getMonth() + 1).toString().padStart(2,'0')}.${date.getDate().toString().padStart(2,'0')} (${dayOfWeek})</li>`;
              });
             listHTML += '</ul>';
             calendarViewMeasurementList.innerHTML = listHTML;
 
-            
-            const lastMeasurement = measurements[measurements.length - 1];
-            let lastDate = null;
-             if (lastMeasurement.date) {
-                 const parts = lastMeasurement.date.match(/(\d{4})\.*? *(\d{1,2})\.*? *(\d{1,2})\.?/);
-                 if (parts) {
-                     lastDate = new Date(parseInt(parts[1]), parseInt(parts[2]) - 1, parseInt(parts[3]));
-                 }
-             } else if (lastMeasurement.timestamp) {
-                 lastDate = new Date(lastMeasurement.timestamp);
-             }
+            // Countdown logic based on the latest valid date
+            const lastDate = dateList[dateList.length - 1];
+            const nextDate = new Date(lastDate.getTime());
+            nextDate.setDate(lastDate.getDate() + 7); // Calculate next measurement date (7 days later)
 
+            const today = new Date();
+            today.setHours(0, 0, 0, 0); // Normalize today to the start of the day
 
-            if (lastDate && !isNaN(lastDate.getTime())) {
-                const nextDate = new Date(lastDate.getTime());
-                nextDate.setDate(lastDate.getDate() + 7); 
+            const timeDiff = nextDate.getTime() - today.getTime();
+            const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); // Calculate remaining days
 
-                const today = new Date();
-                today.setHours(0, 0, 0, 0); 
-
-                const timeDiff = nextDate.getTime() - today.getTime();
-                const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24)); 
-
-                const nextDateStr = `${nextDate.getFullYear()}.${(nextDate.getMonth() + 1).toString().padStart(2,'0')}.${nextDate.getDate().toString().padStart(2,'0')}`;
-
-                
-                if (daysRemaining > 1) {
-                    countdownDisplay.innerHTML = `<p>다음 측정 예정일: <strong>${nextDateStr}</strong> (${daysRemaining}일 남음)</p>`;
-                } else if (daysRemaining === 1) {
-                    countdownDisplay.innerHTML = `<p>다음 측정 예정일: <strong>${nextDateStr}</strong> (내일!)</p>`;
-                } else if (daysRemaining === 0) {
-                    countdownDisplay.innerHTML = `<p><strong>오늘은 측정하는 날입니다! (${nextDateStr})</strong> 💪</p>`;
-                } else { 
-                    countdownDisplay.innerHTML = `<p>측정일(${nextDateStr})이 ${Math.abs(daysRemaining)}일 지났어요. 😥 어서 기록하세요!</p>`;
-                }
-            } else {
-                countdownDisplay.innerHTML = '<p>마지막 측정 날짜 정보를 찾을 수 없어 카운트다운을 표시할 수 없어요.</p>';
+            const nextDateStr = `${nextDate.getFullYear()}.${(nextDate.getMonth() + 1).toString().padStart(2,'0')}.${nextDate.getDate().toString().padStart(2,'0')}`;
+            if (daysRemaining > 1) {
+                countdownDisplay.innerHTML = `<p>다음 측정 예정일: <strong>${nextDateStr}</strong> (${daysRemaining}일 남음)</p>`;
+            } else if (daysRemaining === 1) {
+                countdownDisplay.innerHTML = `<p>다음 측정 예정일: <strong>${nextDateStr}</strong> (내일!)</p>`;
+            } else if (daysRemaining === 0) {
+                countdownDisplay.innerHTML = `<p><strong>오늘은 측정하는 날입니다! (${nextDateStr})</strong> 💪</p>`;
+            } else { // Measurement day has passed
+                countdownDisplay.innerHTML = `<p>측정일(${nextDateStr})이 ${Math.abs(daysRemaining)}일 지났어요. 😥 어서 기록하세요!</p>`;
             }
+
             console.log("DEBUG: <- renderCalendarView 완료");
         } catch (e) {
             console.error(" renderCalendarView 오류:", e);
@@ -559,16 +594,15 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log("DEBUG: -> renderChartSelector 호출됨");
         if (!chartSelector) { console.error("DEBUG: chartSelector 없음!"); return; }
         try {
-            chartSelector.innerHTML = ''; 
-            const selectableKeys = [...numericKeys]; 
+            chartSelector.innerHTML = '';
+            const selectableKeys = [...numericKeys]; // All numeric keys are selectable
             selectableKeys.forEach(key => {
                 const btn = document.createElement('button');
                 btn.textContent = measurementLabels[key] || key;
-                btn.dataset.metric = key; 
+                btn.dataset.metric = key;
                 if (selectedMetrics.includes(key)) {
-                    btn.classList.add('active'); 
+                   btn.classList.add('active');
                 }
-                
                 chartSelector.appendChild(btn);
             });
             console.log("DEBUG: <- renderChartSelector 완료");
@@ -578,33 +612,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleChartSelectorClick(event) {
-        const btn = event.target.closest('button'); 
-        if (!btn || !btn.dataset.metric) return; 
+        const btn = event.target.closest('button');
+        if (!btn || !btn.dataset.metric) return;
 
         const key = btn.dataset.metric;
         console.log(`DEBUG: 차트 선택 버튼 클릭: ${key}`);
 
-        const isActive = btn.classList.toggle('active'); 
-
-        if (isActive) { 
+        const isActive = btn.classList.toggle('active');
+        if (isActive) {
             if (!selectedMetrics.includes(key)) {
-                selectedMetrics.push(key); 
+                selectedMetrics.push(key);
             }
-        } else { 
-            selectedMetrics = selectedMetrics.filter(item => item !== key); 
+        } else {
+            selectedMetrics = selectedMetrics.filter(item => item !== key);
         }
         console.log("DEBUG: 현재 선택된 측정 항목:", selectedMetrics);
-        renderChart(); 
+        renderChart();
     }
 
     function handleSelectAllCharts() {
         console.log("DEBUG: 차트 전체 선택");
-        selectedMetrics = [...numericKeys]; 
+        selectedMetrics = [...numericKeys]; // Select all numeric keys
         chartSelector.querySelectorAll('button').forEach(btn => {
             if (numericKeys.includes(btn.dataset.metric)) {
                 btn.classList.add('active');
             } else {
-                btn.classList.remove('active'); 
+                // Just in case there are non-numeric buttons somehow
+                btn.classList.remove('active');
             }
         });
         renderChart();
@@ -612,9 +646,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleDeselectAllCharts() {
         console.log("DEBUG: 차트 전체 해제");
-        selectedMetrics = []; 
+        selectedMetrics = [];
         chartSelector.querySelectorAll('button').forEach(btn => btn.classList.remove('active'));
-        renderChart(); 
+        renderChart();
     }
 
     function renderChart() {
@@ -624,7 +658,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = chartCanvas.getContext('2d');
         if (!ctx) { console.error("Canvas context를 가져올 수 없습니다."); return; }
 
-        
+        // Destroy existing chart instance before creating a new one
         if (chartInstance) {
             console.log("DEBUG: 기존 차트 인스턴스 제거 시도");
             chartInstance.destroy();
@@ -635,23 +669,23 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (measurements.length === 0 || selectedMetrics.length === 0) {
                 console.log("DEBUG: 차트 표시할 데이터 또는 선택 항목 없음.");
-                clearChart(); 
+                clearChart(); // Display placeholder message
                 return;
             }
 
-            
+            // Prepare labels using week and formatted date
              const labels = measurements.map((m, i) => {
                  const weekLabel = `${m.week !== undefined ? m.week : i}주차`;
-                 const dateLabel = m.date || (m.timestamp ? new Date(m.timestamp).toLocaleDateString('ko-KR') : '');
+                 const dateLabel = formatTimestamp(m.date || m.timestamp).split(' ')[0]; // Date only
                  return `${weekLabel}${dateLabel ? ` (${dateLabel})` : ''}`;
              });
 
-            
-            const chartColors = ['#FA58B6', '#7A0BC0', '#FFCAD4', '#87CEFA', '#90EE90', '#FFD700', '#F08080', '#a89cc8', '#DA70D6', '#40E0D0', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF']; 
-            const datasets = selectedMetrics.map((key, index) => {
+             const chartColors = ['#FA58B6', '#7A0BC0', '#FFCAD4', '#87CEFA', '#90EE90', '#FFD700', '#F08080', '#a89cc8', '#DA70D6', '#40E0D0', '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'];
+
+             const datasets = selectedMetrics.map((key, index) => {
                 const data = measurements.map(m => {
                     const value = m[key];
-                    
+                    // Ensure only valid numbers or null are passed to the chart
                     return (value !== undefined && value !== null && value !== '') ? parseFloat(value) : null;
                 });
                 const color = chartColors[index % chartColors.length];
@@ -659,96 +693,96 @@ document.addEventListener('DOMContentLoaded', () => {
                     label: measurementLabels[key] || key,
                     data: data,
                     borderColor: color,
-                    backgroundColor: color + '33', 
-                    tension: 0.2, 
+                    backgroundColor: color + '33', // Slightly transparent fill
+                    tension: 0.2,
                     pointRadius: 3,
                     pointHoverRadius: 6,
-                    fill: false, 
-                    spanGaps: true, 
+                    fill: false, // Don't fill area under line by default
+                    spanGaps: true, // Connect points across null values
                     borderWidth: 2,
                 };
-            });
+             });
 
-            
+            // Chart configuration
             const chartConfig = {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: datasets
-                },
+                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: false, 
+                    maintainAspectRatio: false,
                     scales: {
-                        y: {
-                            beginAtZero: false, 
-                            ticks: { color: '#a89cc8' }, 
-                            grid: { color: 'rgba(168, 156, 200, 0.2)' } 
+                         y: {
+                            beginAtZero: false, // Don't force Y axis to start at 0
+                            ticks: { color: '#a89cc8' },
+                            grid: { color: 'rgba(168, 156, 200, 0.2)' }
                         },
                         x: {
                             title: {
                                 display: true,
-                                text: '주차 (날짜)', 
-                                color: '#FFCAD4' 
-                            },
+                                text: '주차 (날짜)',
+                                color: '#FFCAD4'
+                             },
                             ticks: {
-                                color: '#a89cc8', 
-                                
+                                color: '#a89cc8',
+                                // Display only week number on ticks for clarity
                                 callback: function(value, index, values) {
-                                    
-                                    const label = this.getLabelForValue(value);
-                                    return label.split(' ')[0]; 
+                                     const label = this.getLabelForValue(value);
+                                     return label.split(' ')[0]; // Extract "X주차" part
                                 }
                             },
-                            grid: { display: false } 
+                            grid: { display: false } // Hide vertical grid lines
                         }
-                    },
+                     },
                     plugins: {
                         legend: {
                             display: true,
-                            position: 'top', 
+                            position: 'top',
                             labels: {
-                                color: '#a89cc8', 
+                                color: '#a89cc8',
                                 boxWidth: 12,
                                 padding: 15
                             }
                         },
-                        tooltip: {
-                            mode: 'index', 
-                            intersect: false, 
-                            backgroundColor: 'rgba(0, 0, 0, 0.8)', 
-                            titleColor: '#FFCAD4', 
-                            bodyColor: '#FFFFFF', 
+                         tooltip: {
+                            mode: 'index', // Show tooltip for all datasets at that index
+                            intersect: false, // Tooltip appears even if not hovering directly over point
+                            backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                            titleColor: '#FFCAD4',
+                            bodyColor: '#FFFFFF',
                             callbacks: {
-                                
+                                // Show full label (Week + Date) in tooltip title
                                 title: function(tooltipItems) {
-                                    if (tooltipItems.length > 0) {
-                                         const label = tooltipItems[0].label;
-                                         return label.split(' ')[0]; 
+                                     if (tooltipItems.length > 0) {
+                                         return tooltipItems[0].label; // Use the full label from chart data
                                     }
                                     return '';
-                                }
+                                },
+                                // Optional: format tooltip body values
+                                // label: function(context) {
+                                //     let label = context.dataset.label || '';
+                                //     if (label) { label += ': '; }
+                                //     if (context.parsed.y !== null) {
+                                //         label += formatValue(context.parsed.y);
+                                //     }
+                                //     return label;
+                                // }
                             }
                         },
-                        title: { display: false } 
-                    },
+                        title: { display: false } // Hide overall chart title (using h3 instead)
+                     },
                     interaction: {
                         mode: 'index',
                         intersect: false,
                     },
-                    
-                    
-                    
                 }
             };
-
-            
             chartInstance = new Chart(ctx, chartConfig);
             console.log("DEBUG: 새 차트 렌더링 완료");
-
         } catch (e) {
             console.error(" 차트 렌더링 오류:", e);
-            
             ctx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
             ctx.font = "16px sans-serif";
             ctx.fillStyle = "red";
@@ -757,135 +791,122 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    
+
     function renderAll() {
         console.log("DEBUG: === renderAll 호출됨 ===");
         try {
             console.log("DEBUG: 현재 measurements:", measurements.length, "개 / notes:", notes.length, "개");
-
-            
             updateCurrentWeekDisplay();
             renderHistoryTable();
             renderPrevWeekComparisonTable();
             renderInitialComparisonTable();
             renderTargetComparisonTable();
             renderCalendarView();
-            renderChartSelector(); 
-            renderNotesList(); 
+            renderChartSelector();
+            renderNotesList();
 
-            
+            // Only render chart if the chart tab is currently active
             const activeTabContent = document.querySelector('.tab-content[style*="display: block"]');
             const activeTabId = activeTabContent ? activeTabContent.id : null;
 
-            
             if (activeTabId === 'tab-change-report') {
                 console.log("DEBUG: 변화 보고서 탭 활성, 차트 렌더링 로직 실행");
-                renderChart(); 
+                renderChart();
             } else {
                 console.log("DEBUG: 변화 보고서 탭 비활성 상태, 차트 렌더링 건너뜀");
-                
+                // Optional: Clear chart if switching away from chart tab to free up memory
+                // clearChart();
             }
 
             console.log("DEBUG: === renderAll 완료 ===");
         } catch (e) {
-            
             console.error(` renderAll 실행 중 오류 발생: ${e.message}`, e.stack);
-            
-            
         }
     }
 
-    
+
     function handleFormSubmit(event) {
         if (event) event.preventDefault();
         console.log("DEBUG: === handleFormSubmit 호출됨 ===");
         try {
             const editIndexStr = editIndexInput.value;
-            const editIndex = editIndexStr !== '' ? parseInt(editIndexStr, 10) : -1; 
+            const editIndex = editIndexStr !== '' && !isNaN(editIndexStr) ? parseInt(editIndexStr, 10) : -1;
             const isEditing = editIndex !== -1;
             console.log(`DEBUG: 수정 모드: ${isEditing}, 인덱스: ${editIndex}`);
 
             const currentMeasurement = {};
             let isValid = true;
-            let firstInvalidField = null; 
+            let firstInvalidField = null;
 
-            
+            // Populate currentMeasurement from form inputs
             [...numericKeys, ...textKeys].forEach(key => {
                 const input = document.getElementById(key);
                 if (input) {
                     let value = input.value.trim();
                     if (numericKeys.includes(key)) {
-                        if (value !== '') {
+                         if (value !== '') {
                             const numValue = parseFloat(value);
-                            
+                            // Validate numeric input (must be non-negative)
                             if (isNaN(numValue) || numValue < 0) {
                                 isValid = false;
                                 if (!firstInvalidField) firstInvalidField = input;
                                 console.warn(`DEBUG: 유효하지 않은 숫자 입력 (${key}): ${value}`);
-                                input.classList.add('invalid-input'); 
+                                input.classList.add('invalid-input');
                             } else {
                                 currentMeasurement[key] = numValue;
                                 input.classList.remove('invalid-input');
                             }
                         } else {
-                            currentMeasurement[key] = null; 
+                             currentMeasurement[key] = null; // Treat empty numeric fields as null
                              input.classList.remove('invalid-input');
                         }
-                    } else { 
-                        currentMeasurement[key] = value === '' ? null : value;
+                    } else { // Text keys
+                        currentMeasurement[key] = value === '' ? null : value; // Treat empty text as null
                     }
                 } else {
                     console.warn(`DEBUG: ID '${key}' 에 해당하는 입력 요소를 찾을 수 없습니다.`);
                 }
             });
 
+            // If validation fails, alert user and focus invalid field
             if (!isValid) {
                 alert("유효하지 않은 숫자 입력이 있습니다. 빨간색으로 표시된 입력 필드를 확인해주세요. 숫자는 0 이상이어야 합니다.");
-                if(firstInvalidField) firstInvalidField.focus(); 
+                if(firstInvalidField) firstInvalidField.focus();
                 return;
             }
 
             console.log("DEBUG: 저장/수정될 데이터:", currentMeasurement);
-
-            
             console.log("DEBUG: measurements 업데이트 전 길이:", measurements.length);
+
             if (isEditing) {
+                // Update existing measurement
                 if (editIndex >= 0 && editIndex < measurements.length) {
-                    
+                    // Preserve existing week and date unless explicitly changed (not possible via form currently)
                     measurements[editIndex] = {
-                        ...measurements[editIndex], 
-                        ...currentMeasurement 
+                        ...measurements[editIndex], // Keep existing week, date, etc.
+                        ...currentMeasurement      // Overwrite with new form values
                     };
                     console.log(`DEBUG: 인덱스 ${editIndex} 업데이트됨`);
                 } else {
                      console.error(`DEBUG: [오류!] 유효하지 않은 수정 인덱스: ${editIndex}`);
                      alert("기록을 수정하는 중 오류가 발생했습니다. 인덱스가 올바르지 않습니다.");
-                     return; 
+                     return;
                 }
             } else {
-                
-                currentMeasurement.week = measurements.length; 
-                
-                currentMeasurement.date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                // Add new measurement
+                currentMeasurement.week = measurements.length; // Assign next week number
+                // Assign current date and time (timestamp more reliable)
+                currentMeasurement.timestamp = Date.now();
+                currentMeasurement.date = new Date().toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }); // Also store formatted date string
                 measurements.push(currentMeasurement);
                 console.log("DEBUG: 새 데이터 추가됨");
             }
+
             console.log("DEBUG: measurements 업데이트 후 길이:", measurements.length);
-
-            
-            console.log("DEBUG: savePrimaryDataToStorage 호출 시도...");
             savePrimaryDataToStorage();
-            console.log("DEBUG: savePrimaryDataToStorage 호출 완료.");
-
-            console.log("DEBUG: resetFormState 호출...");
             resetFormState();
-
-            console.log("DEBUG: renderAll 호출...");
-            renderAll(); 
-
-            console.log("DEBUG: 팝업 표시 시도...");
-            showPopup(isEditing ? "측정 기록 수정 완료! ✨" : "측정 기록 저장 완료! 🎉"); 
-
+            renderAll();
+            showPopup(isEditing ? "측정 기록 수정 완료! ✨" : "측정 기록 저장 완료! 🎉");
             console.log("DEBUG: === handleFormSubmit 성공 ===");
 
         } catch (e) {
@@ -895,7 +916,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleDeleteMeasurement(index) {
-         
         if (index === undefined || index === null || index < 0 || index >= measurements.length) {
             console.error(`DEBUG: [오류!] 유효하지 않은 삭제 인덱스: ${index}`);
             alert("삭제할 기록을 찾을 수 없습니다.");
@@ -903,18 +923,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const entryToDelete = measurements[index];
-        
-        const displayDate = entryToDelete.date || (entryToDelete.timestamp ? new Date(entryToDelete.timestamp).toLocaleDateString('ko-KR') : '날짜 없음');
+        const displayDate = formatTimestamp(entryToDelete.date || entryToDelete.timestamp).split(' ')[0]; // Date only
         if (confirm(`${entryToDelete.week}주차 (${displayDate}) 기록을 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
             try {
-                measurements.splice(index, 1); 
-                
+                measurements.splice(index, 1);
+                // Re-index subsequent entries
                 measurements.forEach((entry, i) => {
                     entry.week = i;
                 });
-                savePrimaryDataToStorage(); 
-                renderAll(); 
-                showPopup("측정 기록 삭제 완료 👍"); 
+                savePrimaryDataToStorage();
+                renderAll();
+                resetFormState(); // Clear form if deleted entry was being edited
+                showPopup("측정 기록 삭제 완료 👍");
                 console.log(`DEBUG: 인덱스 ${index} 기록 삭제 및 주차 재정렬 완료`);
             } catch (e) {
                  console.error(` 인덱스 ${index} 삭제 중 오류:`, e);
@@ -924,54 +944,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleEditClick(index) {
-         
         if (index === undefined || index === null || index < 0 || index >= measurements.length) {
             console.error(`DEBUG: [오류!] 유효하지 않은 수정 인덱스: ${index}`);
             alert("수정할 기록을 찾을 수 없습니다.");
             return;
         }
         console.log(`DEBUG: 수정 버튼 클릭: 인덱스 ${index}`);
-
         const entry = measurements[index];
-        
+
+        // Populate form with data from the selected entry
         [...numericKeys, ...textKeys].forEach(key => {
              const input = document.getElementById(key);
              if (input) {
-                 
                  input.value = entry[key] !== undefined && entry[key] !== null ? entry[key] : '';
-                 input.classList.remove('invalid-input'); 
+                 input.classList.remove('invalid-input'); // Clear validation state
              }
         });
 
-        editIndexInput.value = index; 
-        formTitle.textContent = `측정 기록 수정 (${entry.week}주차)`; 
-        saveUpdateBtn.textContent = '수정 완료'; 
-        if (cancelEditBtn) cancelEditBtn.style.display = 'inline-block'; 
+        // Set form state to editing mode
+        editIndexInput.value = index;
+        formTitle.textContent = `측정 기록 수정 (${entry.week}주차)`;
+        saveUpdateBtn.textContent = '수정 완료';
+        if (cancelEditBtn) cancelEditBtn.style.display = 'inline-block';
 
-        
+        // Switch to input tab and scroll form into view
         const inputTabButton = tabBar ? tabBar.querySelector('button[data-tab="tab-input"]') : null;
         if (inputTabButton) {
-            inputTabButton.click(); 
-            
-             setTimeout(() => { 
-                 form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            inputTabButton.click(); // Activate the input tab
+            // Use setTimeout to ensure tab content is visible before scrolling
+            setTimeout(() => {
+                 if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                 // Optional: focus first input field
+                 const firstInput = form.querySelector('input[type="number"], input[type="text"], textarea');
+                 if (firstInput) firstInput.focus();
              }, 100);
         }
     }
 
     function cancelEdit() {
         console.log("DEBUG: 수정 취소");
-        resetFormState(); 
+        resetFormState();
     }
 
     function resetFormState() {
         console.log("DEBUG: 폼 상태 초기화");
-        if (form) form.reset(); 
-        editIndexInput.value = -1; 
-        saveUpdateBtn.textContent = '저장하기'; 
-        if (cancelEditBtn) cancelEditBtn.style.display = 'none'; 
-
-         
+        if (form) form.reset(); // Reset form fields
+        editIndexInput.value = ''; // Clear edit index (use empty string for hidden input)
+        formTitle.textContent = `새 측정 기록 (현재 ${measurements.length}주차)`; // Update title
+        saveUpdateBtn.textContent = '기록하기 ✨'; // Reset button text
+        if (cancelEditBtn) cancelEditBtn.style.display = 'none'; // Hide cancel button
+        // Clear validation states
         [...numericKeys, ...textKeys].forEach(key => {
              const input = document.getElementById(key);
              if (input) {
@@ -987,24 +1009,24 @@ document.addEventListener('DOMContentLoaded', () => {
         const newTargets = {};
         let isValid = true;
         let firstInvalidField = null;
-
         numericKeys.forEach(key => {
             const input = document.getElementById(`target_${key}`);
             if (input) {
                 const value = input.value.trim();
                 if (value !== '') {
                     const numValue = parseFloat(value);
-                    if (isNaN(numValue) || numValue < 0) { 
+                    // Validate target value (must be non-negative)
+                     if (isNaN(numValue) || numValue < 0) {
                         isValid = false;
                          if (!firstInvalidField) firstInvalidField = input;
                         input.classList.add('invalid-input');
                         console.warn(`DEBUG: 유효하지 않은 목표 값 (${key}): ${value}`);
                     } else {
                         newTargets[key] = numValue;
-                        input.classList.remove('invalid-input');
+                         input.classList.remove('invalid-input');
                     }
                 } else {
-                    newTargets[key] = null; 
+                    newTargets[key] = null; // Treat empty target as null (or undefined?)
                     input.classList.remove('invalid-input');
                 }
             }
@@ -1012,15 +1034,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!isValid) {
             alert("유효하지 않은 목표 값이 있습니다. 빨간색으로 표시된 필드를 확인해주세요. 목표 값은 0 이상이어야 합니다.");
-             if(firstInvalidField) firstInvalidField.focus();
+            if(firstInvalidField) firstInvalidField.focus();
             return;
         }
 
-        targets = newTargets; 
-        savePrimaryDataToStorage(); 
-        
-        renderAll(); 
-        showPopup("목표 저장 완료! 👍"); 
+        targets = newTargets; // Update targets object
+        savePrimaryDataToStorage(); // Save updated targets
+        renderAll(); // Re-render tables (especially target comparison)
+        showPopup("목표 저장 완료! 👍");
         console.log("DEBUG: 목표 저장 완료:", targets);
     }
 
@@ -1028,19 +1049,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (confirm("정말로 모든 측정 기록, 목표, 메모를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다!")) {
             if (confirm("다시 한 번 확인합니다. 모든 데이터가 영구적으로 삭제됩니다. 계속하시겠습니까?")) {
                 try {
-                    localStorage.removeItem(PRIMARY_DATA_KEY); 
-                    
+                    localStorage.removeItem(PRIMARY_DATA_KEY); // Clear storage
+                    // Reset in-memory state
                     measurements = [];
                     targets = {};
                     notes = [];
-                    selectedMetrics = ['weight']; 
-                    currentNoteSortOrder = 'newest';
-                    
-                    resetFormState();
-                    handleCancelEditNote(); 
-                    
-                    populateTargetInputs(); 
-                    renderAll();
+                    selectedMetrics = ['weight']; // Reset chart selection
+                    currentNoteSortOrder = 'newest'; // Reset note sort order
+
+                    resetFormState(); // Reset input form
+                    handleCancelEditNote(); // Reset note form
+
+                    populateTargetInputs(); // Clear target inputs
+                    renderAll(); // Re-render everything (will show empty states)
                     showPopup("모든 데이터가 초기화되었습니다. ✨");
                     console.log("DEBUG: 모든 데이터 초기화 완료");
                 } catch (e) {
@@ -1051,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    
+
     function handleSaveNote() {
         console.log("DEBUG: === handleSaveNote 호출됨 ===");
         if (!noteTitleInput || !noteContentInput || !editNoteIdInput || !noteFormTitle || !saveNoteButton || !cancelEditNoteBtn) {
@@ -1062,35 +1083,35 @@ document.addEventListener('DOMContentLoaded', () => {
         const title = noteTitleInput.value.trim();
         const content = noteContentInput.value.trim();
         const editingNoteIdStr = editNoteIdInput.value;
-        
         const editingNoteId = editingNoteIdStr ? parseInt(editingNoteIdStr, 10) : null;
 
-        
         if (!title && !content) {
             alert("메모 제목이나 내용을 입력해주세요!");
-            noteContentInput.focus(); 
+            noteContentInput.focus();
             return;
         }
 
         try {
-            if (editingNoteId !== null && !isNaN(editingNoteId)) { 
+            if (editingNoteId !== null && !isNaN(editingNoteId)) {
+                // Edit existing note
                 const noteIndex = notes.findIndex(n => n.id === editingNoteId);
                 if (noteIndex > -1) {
-                    notes[noteIndex].title = title || "제목 없음"; 
+                    notes[noteIndex].title = title || "제목 없음"; // Use default if title empty
                     notes[noteIndex].content = content;
-                    notes[noteIndex].updatedAt = Date.now(); 
+                    notes[noteIndex].updatedAt = Date.now(); // Update timestamp
                     console.log(`DEBUG: 메모 수정 완료 (ID: ${editingNoteId})`);
                 } else {
                     console.error(`DEBUG: [오류!] 수정할 메모를 찾지 못했습니다 (ID: ${editingNoteId})`);
                     alert("메모를 수정하는 중 오류가 발생했습니다. 해당 메모를 찾을 수 없습니다.");
-                    handleCancelEditNote(); 
-                    return; 
+                    handleCancelEditNote(); // Reset form if note not found
+                    return;
                 }
-            } else { 
+            } else {
+                // Add new note
                 const newNote = {
-                    id: Date.now(), 
-                    createdAt: Date.now(), 
-                    updatedAt: null, 
+                    id: Date.now(), // Use timestamp as unique ID
+                    createdAt: Date.now(),
+                    updatedAt: null, // No update yet
                     title: title || "제목 없음",
                     content: content
                 };
@@ -1098,15 +1119,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log(`DEBUG: 새 메모 추가 완료 (ID: ${newNote.id})`);
             }
 
-            savePrimaryDataToStorage(); 
-
-            
-            handleCancelEditNote(); 
-
-            
-            renderNotesList();
-            showPopup(editingNoteId ? "메모 수정 완료! ✨" : "새 메모 저장 완료! 🎉"); 
-
+            savePrimaryDataToStorage();
+            handleCancelEditNote(); // Reset form after save/edit
+            renderNotesList(); // Update note list display
+            showPopup(editingNoteId ? "메모 수정 완료! ✨" : "새 메모 저장 완료! 🎉");
         } catch (e) {
             console.error(" 메모 저장/수정 오류:", e);
             alert(`메모를 저장하는 중 오류가 발생했습니다: ${e.message}`);
@@ -1126,35 +1142,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        noteTitleInput.value = note.title === "제목 없음" ? "" : note.title; 
+        // Populate note form
+        noteTitleInput.value = note.title === "제목 없음" ? "" : note.title; // Don't show "제목 없음" in input
         noteContentInput.value = note.content;
-        editNoteIdInput.value = note.id; 
+        editNoteIdInput.value = note.id; // Set hidden input with note ID
 
-        noteFormTitle.textContent = '메모 수정하기'; 
-        saveNoteButton.textContent = '수정 완료'; 
-        cancelEditNoteBtn.style.display = 'inline-block'; 
+        // Update form UI for editing state
+        noteFormTitle.textContent = '메모 수정하기';
+        saveNoteButton.textContent = '수정 완료';
+        cancelEditNoteBtn.style.display = 'inline-block'; // Show cancel button
 
-        
+        // Scroll form into view and focus
         if (noteFormArea) {
             noteFormArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            
-            setTimeout(() => noteTitleInput.focus(), 300);
+            setTimeout(() => noteTitleInput.focus(), 300); // Focus after scroll animation
         }
     }
 
     function handleCancelEditNote() {
         console.log("DEBUG: 메모 수정/작성 취소");
-         if (!noteTitleInput || !noteContentInput || !editNoteIdInput || !noteFormTitle || !saveNoteButton || !cancelEditNoteBtn) {
+        if (!noteTitleInput || !noteContentInput || !editNoteIdInput || !noteFormTitle || !saveNoteButton || !cancelEditNoteBtn) {
              console.error("DEBUG: [오류!] 메모 폼 초기화 위한 DOM 요소 누락");
              return;
          }
+        // Reset form fields
         noteTitleInput.value = '';
         noteContentInput.value = '';
-        editNoteIdInput.value = ''; 
+        editNoteIdInput.value = ''; // Clear hidden ID input
 
-        noteFormTitle.textContent = '새 메모 작성하기'; 
-        saveNoteButton.textContent = '메모 저장'; 
-        cancelEditNoteBtn.style.display = 'none'; 
+        // Reset form UI to default state
+        noteFormTitle.textContent = '새 메모 작성하기';
+        saveNoteButton.textContent = '메모 저장';
+        cancelEditNoteBtn.style.display = 'none'; // Hide cancel button
         console.log("DEBUG: 메모 폼 초기화 완료");
     }
 
@@ -1168,15 +1187,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const noteTitle = notes[noteIndex].title;
-        
         if (confirm(`"${noteTitle}" 메모를 정말 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) {
             try {
-                 notes.splice(noteIndex, 1); 
-                 savePrimaryDataToStorage(); 
-                 renderNotesList(); 
-                 showPopup("메모 삭제 완료 👍"); 
+                 notes.splice(noteIndex, 1); // Remove note from array
+                 savePrimaryDataToStorage();
+                 renderNotesList(); // Update list display
+                 showPopup("메모 삭제 완료 👍");
                  console.log(`DEBUG: 메모 삭제 완료 (ID: ${noteId})`);
-                 
+                 // If the deleted note was being edited, reset the form
                  if (editNoteIdInput.value && parseInt(editNoteIdInput.value, 10) === noteId) {
                      handleCancelEditNote();
                  }
@@ -1187,18 +1205,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    
+
     function sortNotes(notesArray, order = 'newest') {
-        
+        // Create a copy before sorting to avoid modifying the original array directly
         return [...notesArray].sort((a, b) => {
-            
-            const timeA = a.createdAt || a.id || 0; 
+            // Use createdAt timestamp if available, otherwise fallback to id (which is also a timestamp)
+            const timeA = a.createdAt || a.id || 0;
             const timeB = b.createdAt || b.id || 0;
-            return order === 'newest' ? timeB - timeA : timeA - timeB; 
+            return order === 'newest' ? timeB - timeA : timeA - timeB; // Sort descending for newest, ascending for oldest
         });
     }
 
-    
+
     function renderNotesList() {
         console.log("DEBUG: -> renderNotesList 호출됨, 정렬:", currentNoteSortOrder);
         if (!notesListContainer) {
@@ -1206,25 +1224,30 @@ document.addEventListener('DOMContentLoaded', () => {
              return;
         }
         if (!Array.isArray(notes) || notes.length === 0) {
-            clearNotesList(); 
+            clearNotesList(); // Show empty message
             return;
         }
 
         try {
-			const sortedNotes = sortNotes(notes, currentNoteSortOrder);
+			const sortedNotes = sortNotes(notes, currentNoteSortOrder); // Sort notes based on current selection
 			let listHTML = '';
 			sortedNotes.forEach(note => {
+                // Generate preview text (limit length, handle newlines)
 				const previewLength = 100;
 				const previewContent = note.content.length > previewLength
 					? note.content.substring(0, previewLength).replace(/\n/g, ' ') + '...'
 					: note.content.replace(/\n/g, ' ');
 
+                // Format timestamps
+                const createdStr = formatTimestamp(note.createdAt || note.id);
+                const updatedStr = note.updatedAt ? formatTimestamp(note.updatedAt) : '';
+
 				listHTML += `
 				<div class="note-item" data-note-id="${note.id}">
 					<h4>${note.title}</h4>
 					<div class="note-date">
-						작성: ${formatTimestamp(note.createdAt || note.id)}
-						${note.updatedAt ? `<span class="note-updated">(수정: ${formatTimestamp(note.updatedAt)})</span>` : ''}
+						작성: ${createdStr}
+						${updatedStr ? `<span class="note-updated">(수정: ${updatedStr})</span>` : ''}
 					</div>
 					<div class="note-content-preview">${previewContent || '(내용 없음)'}</div>
 					<div class="note-actions">
@@ -1240,30 +1263,81 @@ document.addEventListener('DOMContentLoaded', () => {
             notesListContainer.innerHTML = '<p style="color: red;">메모 목록을 불러오는 중 오류가 발생했습니다.</p>';
         }
     }
+
+    // ----- 스크롤 리스너 설정 함수 시작 -----
+    function setupScrollListener() {
+        // 스크롤 리스너 내부에서 사용할 tabBar 요소를 가져옵니다.
+        const localTabBar = document.querySelector('.tab-bar'); // Use local variable to avoid potential scope issues if tabBar isn't available globally yet
+        if (!localTabBar) {
+            console.warn("DEBUG: [Scroll Listener] Tab bar not found during setup.");
+            return; // tabBar 없으면 설정 중단
+        }
+
+        const scrollThreshold = window.innerHeight * 0.15; // 화면 높이의 15% (조절 가능)
+        const nearTopThreshold = 50; // 화면 최상단으로 간주할 픽셀 값 (조절 가능)
+
+        // 스크롤 이벤트 리스너 추가
+        window.addEventListener('scroll', () => {
+            const currentScrollY = window.scrollY;
+            // 스크롤 방향 감지에 약간의 버퍼를 둠 (1px 이상 움직였을 때만 방향 감지)
+            const scrollDelta = currentScrollY - lastScrollY;
+            const isScrollingDown = scrollDelta > 1;
+            const isScrollingUp = scrollDelta < -1;
+
+            // --- 상태 변경 로직 ---
+            if (isScrollingDown && currentScrollY > scrollThreshold && !isTabBarCollapsed) {
+                // [축소] 아래로 스크롤 & 임계점 넘음 & 아직 축소 안됨
+                localTabBar.classList.add('collapsed');
+                isTabBarCollapsed = true;
+                // console.log("DEBUG: Tab bar collapsed"); // 디버그 완료 후 주석 처리 가능
+            } else if (isScrollingUp && currentScrollY <= scrollThreshold && isTabBarCollapsed) {
+                // [확장] 위로 스크롤 & 임계점 이하 & 현재 축소됨
+                localTabBar.classList.remove('collapsed');
+                isTabBarCollapsed = false;
+                // console.log("DEBUG: Tab bar expanded"); // 디버그 완료 후 주석 처리 가능
+            } else if (currentScrollY < nearTopThreshold && isTabBarCollapsed) {
+                // [확장] 화면 최상단 근처 & 현재 축소됨 (스크롤 방향 무관)
+                localTabBar.classList.remove('collapsed');
+                isTabBarCollapsed = false;
+                // console.log("DEBUG: Tab bar expanded (near top)"); // 디버그 완료 후 주석 처리 가능
+            }
+            // --- 로직 끝 ---
+
+            // 마지막 스크롤 위치 업데이트 (의미있는 움직임이 있을 때만 또는 맨 위로 갔을 때)
+            if (Math.abs(scrollDelta) > 1 || currentScrollY === 0) {
+                 lastScrollY = currentScrollY <= 0 ? 0 : currentScrollY;
+            }
+        }, { passive: true }); // 스크롤 성능 향상을 위해 passive 옵션 추가
+
+        console.log("DEBUG: 스크롤 기반 탭 바 숨김 리스너 추가됨 (수정됨)");
+    }
+    // ----- 스크롤 리스너 설정 함수 끝 -----
+
+
     console.log("DEBUG: 함수 정의 완료");
 
-    
+
+    // ===============================================
+    // 애플리케이션 초기화 (Initialization)
+    // ===============================================
     console.log("DEBUG: 애플리케이션 초기화 시작");
     try {
-        
-        
+        loadAllData(); // Load data from storage first
+        setupTargetInputs(); // Setup target form structure
+        populateTargetInputs(); // Fill target form with loaded data
 
-        loadAllData(); 
-        setupTargetInputs(); 
-        populateTargetInputs(); 
-
-        
+        // Activate the first tab by default
         const initialTab = tabBar ? tabBar.querySelector('.tab-button') : null;
         if (initialTab) {
-             initialTab.click(); 
+             initialTab.click(); // Simulate click on the first tab button
         } else if (tabContents.length > 0) {
-            
+            // Fallback if no tab bar: show first content section
             tabContents.forEach((content, index) => {
                  content.style.display = index === 0 ? 'block' : 'none';
             });
         }
 
-        renderAll(); 
+        renderAll(); // Initial render of all components
 
         console.log("DEBUG: 애플리케이션 초기화 완료");
     } catch (initError) {
@@ -1271,40 +1345,44 @@ document.addEventListener('DOMContentLoaded', () => {
         alert("애플리케이션을 초기화하는 중 오류가 발생했습니다. 페이지를 새로고침하거나 데이터를 초기화해야 할 수 있습니다.");
     }
 
-    
+    // ===============================================
+    // 이벤트 리스너 설정 (Event Listener Setup)
+    // ===============================================
     console.log("DEBUG: 이벤트 리스너 설정 시작");
     try {
-        
+        // Tab Bar Navigation
         if (tabBar) {
             console.log("DEBUG: tabBar 리스너 추가");
             tabBar.addEventListener('click', (e) => {
-                const button = e.target.closest('.tab-button'); 
+                const button = e.target.closest('.tab-button');
                 if (button && button.dataset.tab) {
                     const targetTabId = button.dataset.tab;
                     console.log(`DEBUG: 탭 버튼 클릭됨: ${targetTabId}`);
                     try {
-                        
+                        // Deactivate all buttons and content
                         tabBar.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-                        
-                        button.classList.add('active');
-
-                        
                         tabContents.forEach(content => content.style.display = 'none');
-                        
+
+                        // Activate clicked button and corresponding content
+                        button.classList.add('active');
                         const targetContent = document.getElementById(targetTabId);
                         if (targetContent) {
                             targetContent.style.display = 'block';
                             console.log(`DEBUG: ${targetTabId} 활성화 완료`);
 
-                            
-                            if (targetTabId === 'tab-change-report') {
+                             // Special actions for specific tabs when activated
+                             if (targetTabId === 'tab-change-report') {
                                 console.log("DEBUG: 변화 보고서 탭 활성화, 차트 렌더링");
-                                renderChart(); 
+                                renderChart(); // Render chart specifically when this tab is shown
                             } else if (targetTabId === 'tab-overview') {
                                 console.log("DEBUG: 개요 탭 활성화, 메모 목록 렌더링");
-                                renderNotesList(); 
+                                renderNotesList(); // Re-render notes when this tab is shown
+                            } else if (targetTabId === 'tab-calendar') {
+                                 renderCalendarView(); // Re-render calendar view when shown
+                            } else if (targetTabId === 'tab-history') {
+                                 renderHistoryTable(); // Re-render history table when shown
                             }
-                            
+
                         } else {
                              console.error(`DEBUG: [오류!] ID '${targetTabId}' 에 해당하는 탭 컨텐츠 없음!`);
                         }
@@ -1315,53 +1393,51 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else { console.error("DEBUG: [오류!] tabBar 요소 없음!"); }
 
-        
+        // Measurement Form Submit
         if (form) {
             form.addEventListener('submit', handleFormSubmit);
             console.log("DEBUG: 측정 기록 폼 제출 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] 측정 기록 폼 없음!"); }
 
-        
+        // Cancel Edit Measurement Button
         if (cancelEditBtn) {
             cancelEditBtn.addEventListener('click', cancelEdit);
-            console.log("DEBUG: 수정 취소 버튼 리스너 추가됨");
+            console.log("DEBUG: 측정 수정 취소 버튼 리스너 추가됨");
         }
 
-        
+        // Target Form Submit
         if (targetForm) {
             targetForm.addEventListener('submit', handleTargetFormSubmit);
             console.log("DEBUG: 목표 폼 제출 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] 목표 폼 없음!"); }
 
-        
+        // Reset Data Button
         if (resetDataButton) {
             resetDataButton.addEventListener('click', handleResetData);
             console.log("DEBUG: 데이터 리셋 버튼 리스너 추가됨");
         }
 
-        
+        // Export Data Button
         if (exportDataButton) {
             exportDataButton.addEventListener('click', exportMeasurementData);
             console.log("DEBUG: 데이터 내보내기 버튼 리스너 추가됨");
         }
 
-        
+        // Import Data Button & Input
         if (importDataButton && importFileInput) {
-            importDataButton.addEventListener('click', () => importFileInput.click());
+            importDataButton.addEventListener('click', () => importFileInput.click()); // Trigger file input click
             console.log("DEBUG: 데이터 가져오기 버튼 리스너 추가됨");
         }
-
-        
         if (importFileInput) {
-            importFileInput.addEventListener('change', importMeasurementData);
+            importFileInput.addEventListener('change', importMeasurementData); // Handle file selection
             console.log("DEBUG: 파일 입력 변경 리스너 추가됨");
         }
 
-        
+        // History Table Edit/Delete Buttons (Event Delegation)
         if (historyContainer) {
             historyContainer.addEventListener('click', (e) => {
-                const editButton = e.target.closest('.btn-edit'); 
-                const deleteButton = e.target.closest('.btn-delete'); 
+                const editButton = e.target.closest('.btn-edit');
+                const deleteButton = e.target.closest('.btn-delete');
 
                 if (editButton && editButton.dataset.index !== undefined) {
                     handleEditClick(parseInt(editButton.dataset.index, 10));
@@ -1372,83 +1448,33 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("DEBUG: 측정 기록 테이블 이벤트 위임 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] historyContainer 요소 없음!"); }
 
-
-        
+        // Save Note Button
         if (saveNoteButton) {
              saveNoteButton.addEventListener('click', handleSaveNote);
              console.log("DEBUG: 메모 저장 버튼 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] 메모 저장 버튼 없음!"); }
 
-
-
-function renderHistoryTable() {
-    console.log("DEBUG: -> renderHistoryTable 호출됨");
-    if (!historyContainer) { console.error("DEBUG: [오류!] historyContainer 요소 없음!"); return; }
-    console.log("DEBUG: renderHistoryTable - Rendering with measurements count:", measurements.length);
-
-    if (!Array.isArray(measurements) || measurements.length === 0) {
-        clearHistoryTable();
-        return;
-    }
-
-    try {
-        let tableHTML = '<table><thead><tr>';
-        tableHTML += `<th>${measurementLabels['week']}</th>`;
-        tableHTML += `<th>${measurementLabels['date']}</th>`;
-        for (const key of displayKeysInOrder) {
-            tableHTML += `<th>${measurementLabels[key] || key}</th>`;
-        }
-        
-        tableHTML += '<th class="sticky-col">관리</th></tr></thead><tbody>';
-
-        for (let i = 0; i < measurements.length; i++) {
-            const m = measurements[i];
-            const displayDate = m.date || (m.timestamp ? new Date(m.timestamp).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }) : '-');
-
-            tableHTML += '<tr>';
-            tableHTML += `<td>${m.week !== undefined ? m.week : i}</td>`;
-            tableHTML += `<td>${displayDate}</td>`;
-
-            for (const key of displayKeysInOrder) {
-                tableHTML += `<td>${formatValue(m[key])}</td>`;
-            }
-            
-            tableHTML += `<td class="action-buttons sticky-col">
-                            <button class="btn btn-edit" data-index="${i}">수정</button>
-                            <button class="btn btn-delete" data-index="${i}">삭제</button>
-                          </td>`;
-            tableHTML += '</tr>';
-        }
-        tableHTML += '</tbody></table>';
-        historyContainer.innerHTML = tableHTML;
-        console.log("DEBUG: <- renderHistoryTable 완료");
-    } catch (e) {
-        console.error(" renderHistoryTable 오류:", e);
-        historyContainer.innerHTML = '<p style="color: red;">기록 테이블 렌더링 중 오류 발생</p>';
-    }
-}
-
-
-
+        // Cancel Edit Note Button
         if (cancelEditNoteBtn) {
              cancelEditNoteBtn.addEventListener('click', handleCancelEditNote);
              console.log("DEBUG: 메모 수정 취소 버튼 리스너 추가됨");
         }
 
+        // Note Sort Order Select
         if (noteSortOrderSelect) {
              noteSortOrderSelect.addEventListener('change', (e) => {
                  currentNoteSortOrder = e.target.value;
                  console.log(`DEBUG: 메모 정렬 순서 변경됨: ${currentNoteSortOrder}`);
-                 renderNotesList(); 
+                 renderNotesList(); // Re-render notes with new sort order
              });
              console.log("DEBUG: 메모 정렬 순서 변경 리스너 추가됨");
         }
 
-        
+        // Notes List Edit/Delete Buttons (Event Delegation)
         if (notesListContainer) {
             notesListContainer.addEventListener('click', (e) => {
-                const editBtn = e.target.closest('.btn-note-edit'); 
-                const deleteBtn = e.target.closest('.btn-note-delete'); 
+                const editBtn = e.target.closest('.btn-note-edit');
+                const deleteBtn = e.target.closest('.btn-note-delete');
 
                 if (editBtn && editBtn.dataset.id) {
                     handleEditNoteStart(parseInt(editBtn.dataset.id, 10));
@@ -1459,13 +1485,13 @@ function renderHistoryTable() {
             console.log("DEBUG: 메모 목록 이벤트 위임 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] notesListContainer 요소 없음!"); }
 
-        
+        // Chart Selector Buttons (Event Delegation)
         if (chartSelector) {
             chartSelector.addEventListener('click', handleChartSelectorClick);
              console.log("DEBUG: 차트 선택 버튼 이벤트 위임 리스너 추가됨");
         } else { console.error("DEBUG: [오류!] chartSelector 요소 없음!"); }
 
-
+        // Chart Bulk Action Buttons
         if (selectAllChartsBtn) {
              selectAllChartsBtn.addEventListener('click', handleSelectAllCharts);
              console.log("DEBUG: 차트 전체 선택 버튼 리스너 추가됨");
@@ -1475,6 +1501,10 @@ function renderHistoryTable() {
              console.log("DEBUG: 차트 전체 해제 버튼 리스너 추가됨");
         }
 
+        // ----- 스크롤 리스너 설정 함수 호출 -----
+        setupScrollListener();
+        // ----- 호출 끝 -----
+
         console.log("DEBUG: 모든 이벤트 리스너 설정 완료 (또는 시도)");
 
     } catch (listenerError) {
@@ -1482,4 +1512,4 @@ function renderHistoryTable() {
         alert("페이지 인터랙션 설정 중 오류가 발생했습니다. 일부 기능이 작동하지 않을 수 있습니다.");
     }
 
-}); 
+}); // DOMContentLoaded 끝
